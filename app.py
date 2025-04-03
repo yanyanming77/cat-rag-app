@@ -1,8 +1,12 @@
 import streamlit as st
 import time
+import tempfile
+import os
+from langchain_community.vectorstores import FAISS
+
 
 st.set_page_config(page_title="Cat Expert Chatbot 🐾", layout="wide")
-from rag_core import generate_answer, strip_html
+from rag_core import generate_answer, strip_html, load_and_chunk_document, create_or_update_faiss, retrieve_from_upload_document
 
 st.markdown("""
     <style>
@@ -20,7 +24,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 10px;
         color: black;
-        font-size: 16px;
+        font-size: 12px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -76,30 +80,39 @@ if st.session_state.get("reset_done", False):
     del st.session_state["reset_done"]
 
 # Display chat history (exclude the *last* assistant message if a new one is being typed)
-if not st.session_state.get("generating_response", False):
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"], unsafe_allow_html=True)
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"], unsafe_allow_html=True)
+
+# Initialize FAISS vectorstore in session state if not already
+if "faiss_store" not in st.session_state:
+    st.session_state.faiss_store = None
 
 # User input box (chat-style)
 if prompt := st.chat_input("Ask me anything about cats..."):
-    st.session_state.generating_response = True
-
     # Show user's message
     with st.chat_message("user"):
         st.markdown(prompt)
 
     # Generate assistant response
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            try:
-                # get chat history
-                history = st.session_state.messages[-6:] # 3 turns = 6 messages
+    with st.spinner("Thinking..."):
+        try:
+            # get chat history
+            history = st.session_state.messages[-6:] # 3 turns = 6 messages
+            # get user-uploaded document
+            if "uploaded_docs" in st.session_state:
+                user_doc_retrieval = retrieve_from_upload_document(prompt)
+                # generate response
+                response = generate_answer(prompt, history, user_doc_retrieval)
+            else:
+                # generate response
                 response = generate_answer(prompt, history)
-            except Exception as e:
-                response = "Oops! Something went wrong. Please try again later."
-                print(f"error: {e}")
+        except Exception as e:
+            response = f"⚠️ Oops! Something went wrong.\n\n**Error:** `{str(e)}`"
+            st.error(f"Exception: {e}")  # Optional: show in sidebar too
+            print(f"error: {e}")
 
+    with st.chat_message("assistant"):
         formatted_response = f"""
             <div class="assistant-message">
                 {response}
@@ -110,5 +123,24 @@ if prompt := st.chat_input("Ask me anything about cats..."):
     # Save messages to session_state (already formatted!)
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.messages.append({"role": "assistant", "content": formatted_response})
-    st.session_state.generating_response = False
-    st.rerun() 
+    # st.rerun() 
+
+# add feature to allow user's upload of document file
+left_col, right_col = st.columns(2)
+with left_col:
+    uploaded_doc = st.file_uploader("📄 Upload Document", type=["pdf", "txt", "docx"], key="doc_upload")
+    if uploaded_doc:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_doc.name)[1]) as tmp:
+            tmp.write(uploaded_doc.read())
+            doc_chunks = load_and_chunk_document(tmp.name)
+            st.session_state.faiss_store = create_or_update_faiss(st.session_state.faiss_store, doc_chunks)
+            # track state of the uploaded document
+            if "uploaded_docs" not in st.session_state:
+                st.session_state.uploaded_docs = []
+            st.session_state.uploaded_docs.append(uploaded_doc.name)
+
+# add feature to allow user's upload of plant or nutrition fact image file
+with right_col:
+    uploaded_image = st.file_uploader("📷 Upload Image", type=["png", "jpg", "jpeg"], key="img_upload")
+    if uploaded_image:
+        st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)

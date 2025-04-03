@@ -14,13 +14,17 @@ import streamlit as st
 from bs4 import BeautifulSoup
 
 from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain.chains import create_sql_query_chain
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+import uuid
 from openai import OpenAI
 
 ######################## DEFINE OPENAI API KEY #######################
@@ -156,11 +160,13 @@ Classify the following query into one or more of these categories:
 4. Common Cat Behavior
 5. Common Cat Diseases
 6. Cats Plant Toxicity
+7. None
 
 - If the question is about how cats live, their behavior, or lifespan, include "Common Cat Behavior".
 - If the question involves illnesses, aging-related issues, or health risks, include "Common Cat Diseases".
 - If the question involves plant safety for cats, include "Cats Plant Toxicity".
 - If multiple categories apply, list all relevant ones.
+- If the question is not related to any of 1-6, then return 'None'
 
 Query: {query}
 Categories (comma-separated):
@@ -198,66 +204,72 @@ def retrieve_documents_and_sql(query):
     predicted_topic = [cat.strip() for cat in predicted_topic.split(",")]
     print(f'Predicted topic: {predicted_topic}')
     
-    # Map classification output to stored ChromaDB collection names
-    topic_mapping = {
-        "Cats Grooming": "Cats_Grooming_Tips",
-        "Cat Nutrition": "Cat_Nutrition_Tips",
-        "Cats and Babies": "Cats_and_Babies",
-        "Common Cat Behavior": "Common_Cat_Behavior",
-        "Common Cat Diseases": "Common_Cat_Diseases"
-    }
+    if predicted_topic != 'None':
+        # Map classification output to stored ChromaDB collection names
+        topic_mapping = {
+            "Cats Grooming": "Cats_Grooming_Tips",
+            "Cat Nutrition": "Cat_Nutrition_Tips",
+            "Cats and Babies": "Cats_and_Babies",
+            "Common Cat Behavior": "Common_Cat_Behavior",
+            "Common Cat Diseases": "Common_Cat_Diseases"
+        }
+        
+        retrieved_results = {} # the dictionary that stores 'general' and 'sql'
+        retrieved_results['general'] = []
+        retrieved_results['sql'] = []
+
+        retrieved_docs = []
+        # iteratve over each predicted topic
+        # use multi-query approach (use llm to rephrase multiple versions of the prompt)
+        for topic in predicted_topic:
+            if topic in topic_mapping.keys():
+                collection_name = topic_mapping[topic]
+                vector_db = vector_stores[collection_name]
+                # Perform search
+                multi_query_prompt = PromptTemplate.from_template(
+                    """Generate 5 diverse search queries for this question: {question} \n
+                    Keep the result to only contain the 5 generated questions as list of strings.
+                    """
+                )
+                doc_retriever = vector_db.as_retriever(search_kwargs={"k":8})
+                multi_query_retriever = MultiQueryRetriever.from_llm(
+                    retriever = doc_retriever,
+                    llm = llm_response,
+                    prompt = multi_query_prompt
+                )
+                # get documents
+                docs = multi_query_retriever.get_relevant_documents(query)
+                multi_queries = multi_query_retriever.llm_chain.invoke({"question": query})
+                # print(f"generated sub-queries: \n{multi_queries}")
+                retrieved_docs.extend(docs)
+            
+        # deduplicate documents if needed
+        unique_docs = {doc.page_content: doc for doc in retrieved_docs}.values()
+        retrieved_docs = list(unique_docs) 
+        # print(f"retrieved documents: \n{retrieved_docs}")
+        retrieved_results['general'] = retrieved_docs
+
+        # if Cats Plan Toxicity is in the topic and sql query needs to be ran
+        if 'Cats Plant Toxicity' in predicted_topic:
+            if len(predicted_topic) > 1:
+                # extract the toxicity part from the query
+                toxicity_part_question = extract_toxicity_chain.run(query)
+            elif len(predicted_topic) == 1:
+                toxicity_part_question = query
+            # print(toxicity_part_question)
+            
+            sql_query = generate_sql_gpt4omini(toxicity_part_question, True)
+            sql_query_result = execute_sql(sql_query)
+            retrieved_results['sql'] = sql_query_result
+        else:
+            toxicity_part_question = ''
+            sql_query = ''
     
-    retrieved_results = {} # the dictionary that stores 'general' and 'sql'
-    retrieved_results['general'] = []
-    retrieved_results['sql'] = []
-
-    retrieved_docs = []
-    # iteratve over each predicted topic
-    # use multi-query approach (use llm to rephrase multiple versions of the prompt)
-    for topic in predicted_topic:
-        if topic in topic_mapping.keys():
-            collection_name = topic_mapping[topic]
-            vector_db = vector_stores[collection_name]
-            # Perform search
-            multi_query_prompt = PromptTemplate.from_template(
-                """Generate 5 diverse search queries for this question: {question} \n
-                   Keep the result to only contain the 5 generated questions as list of strings.
-                """
-            )
-            doc_retriever = vector_db.as_retriever(search_kwargs={"k":8})
-            multi_query_retriever = MultiQueryRetriever.from_llm(
-                retriever = doc_retriever,
-                llm = llm_response,
-                prompt = multi_query_prompt
-            )
-            # get documents
-            docs = multi_query_retriever.get_relevant_documents(query)
-            multi_queries = multi_query_retriever.llm_chain.invoke({"question": query})
-            print(f"generated sub-queries: \n{multi_queries}")
-            retrieved_docs.extend(docs)
-        
-    # deduplicate documents if needed
-    unique_docs = {doc.page_content: doc for doc in retrieved_docs}.values()
-    retrieved_docs = list(unique_docs) 
-    print(f"retrieved documents: \n{retrieved_docs}")
-    retrieved_results['general'] = retrieved_docs
-
-    # if Cats Plan Toxicity is in the topic and sql query needs to be ran
-    if 'Cats Plant Toxicity' in predicted_topic:
-        if len(predicted_topic) > 1:
-            # extract the toxicity part from the query
-            toxicity_part_question = extract_toxicity_chain.run(query)
-        elif len(predicted_topic) == 1:
-            toxicity_part_question = query
-        print(toxicity_part_question)
-        
-        sql_query = generate_sql_gpt4omini(toxicity_part_question, True)
-        sql_query_result = execute_sql(sql_query)
-        retrieved_results['sql'] = sql_query_result
+    # if the topic is not related to documents stored in chroma_db
     else:
         toxicity_part_question = ''
         sql_query = ''
-
+        retrieved_results = None
     # return the toxicity_part_question, sql_query, and the final result
     return toxicity_part_question, sql_query, retrieved_results
 
@@ -266,9 +278,10 @@ def retrieve_documents_and_sql(query):
 # Define the prompt template
 prompt_template_response = PromptTemplate.from_template("""
 You are a cat expert and will answer user's questions based on the following contexts:
-retrieved document, the SQL database, and the conversation history.
+retrieved document, the SQL database, the conversation history, and the user uploaded document
 
 Respond in a conversational tone — helpful, relaxed, and easy to understand, like you're talking to a fellow pet owner, you could use emojis if necessary.
+The respond should be short and concise.
 
 - If the `toxicity_part_question` and `toxicity_sql_query` are empty, provide the answer based only on `document_context`.
 - If `toxicity_part_question` and `toxicity_sql_query` are **not empty**, use both `sql_context` and `document_context` to generate the answer.
@@ -297,6 +310,9 @@ If you do not find enough information in the retrieved knowledge, say:
 {query}
 
 ### **Conversation History**
+{user_doc_context}
+
+### **Retrieved knowledge from user uploads**
 {history_context}
 
 ### **Answer**
@@ -307,7 +323,7 @@ llm_chain_response = LLMChain(llm=llm_response, prompt=prompt_template_response)
 
 # Define a function to generate answer
 # add short-term memory
-def generate_answer(query, history = None, print_details = False):
+def generate_answer(query, history = None, user_doc = None, print_details = False):
     # retrieve
     toxicity_part_question, toxicity_sql_query, retrieved_results = retrieve_documents_and_sql(query)
     
@@ -316,25 +332,71 @@ def generate_answer(query, history = None, print_details = False):
             print(f"toxicity part question:\n{toxicity_part_question}\n")
             print(f"toxicity part sql query:\n{toxicity_sql_query}\n")
             print(f"retrieved sql results:\n{retrieved_results['sql']}")
+
     # create answer
-    if retrieved_results['general'] or retrieved_results['sql']:
+    if retrieved_results:
         document_context = "\n\n".join([doc.page_content for doc in retrieved_results['general']])
-
-        # if there is history
-        if history:
-            history_context = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in history])
-        else:
-            history_context = ''
-
-        sql_context = retrieved_results['sql']
-        answer = llm_chain_response.run({"document_context": document_context, \
-                                        "history_context": history_context, \
-                                        "sql_context":sql_context, \
-                                        "toxicity_sql_query": toxicity_sql_query, "query": query})
-        return answer
     else:
-        print('No relevant information found')
+        document_context = ''
+    # if there is history
+    if history:
+        history_context = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in history])
+    else:
+        history_context = ''
+    
+    # if there is user uploaded document
+    if user_doc:
+        user_doc_context = "\n\n".join([doc.page_content for doc in user_doc])
+    else: 
+        user_doc_context = ''
+
+    sql_context = retrieved_results['sql']
+    answer = llm_chain_response.run({"document_context": document_context, \
+                                    "history_context": history_context, \
+                                    "user_doc_context": user_doc_context, \
+                                    "sql_context":sql_context, \
+                                    "toxicity_sql_query": toxicity_sql_query, "query": query})
+    return answer
+
 
 ######################## OTHER FUNCTIONS #######################
 def strip_html(text):
+    """Prettify html text"""
     return BeautifulSoup(text, "html.parser").get_text().strip()
+
+def load_and_chunk_document(file_path):
+    """load user-uploaded document"""
+    if file_path.endswith(".pdf"):
+        loader = PyPDFLoader(file_path)
+    elif file_path.endswith(".txt"):
+        loader = TextLoader(file_path)
+    elif file_path.endswith(".docx"):
+        loader = Docx2txtLoader(file_path)
+    else:
+        raise ValueError("Unsupported file type.")
+    
+    # chunk and embed
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=80)
+    chunks = text_splitter.split_documents(loader.load())
+
+    return chunks
+
+def create_or_update_faiss(faiss_store, doc_chunks):
+    # Convert Document objects to plain strings
+    texts = [doc.page_content for doc in doc_chunks]
+
+    # Either create or extend FAISS store
+    if faiss_store is None:
+        # First doc: create a new FAISS store
+        return FAISS.from_texts(texts, embedding_function)
+    else:
+        # Add to existing FAISS store
+        faiss_store.add_texts(texts)
+        return faiss_store
+
+def retrieve_from_upload_document(query):
+    """retrieve from the user uploaded vector db"""
+
+    result = st.session_state.faiss_store.similarity_search(query, k=3)
+
+    return result
