@@ -14,15 +14,14 @@ import pandas as pd
 import streamlit as st
 from bs4 import BeautifulSoup
 
-from langchain.vectorstores import Chroma
-from langchain_community.vectorstores import FAISS
-from langchain.chains import create_sql_query_chain
+from chromadb import PersistentClient
+from langchain_community.vectorstores import Chroma, FAISS
+from langchain.chains import create_sql_query_chain, LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.chat_models import ChatOpenAI
+from langchain_community.embeddings import OpenAIEmbeddingsfrom langchain.chat_models 
+from langchain_community.chat_models import ChatOpenAI
 from langchain.retrievers.multi_query import MultiQueryRetriever
-from langchain.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 import uuid
@@ -44,13 +43,15 @@ embedding_function = load_embedding_function(openai.api_key)
 
 ######################## LOAD CHROMA DB #######################
 persist_dir = Path('./chroma_db')
+chroma_client = PersistentClient(path = f"{persist_dir}/{topic}")
 
 @st.cache_resource
 def load_chroma():
     vector_stores = {}
     for topic in ["Cats_Grooming_Tips", "Cat_Nutrition_Tips", "Cats_and_Babies", "Common_Cat_Behavior", "Common_Cat_Diseases"]:  
         vector_stores[topic] = Chroma(
-            persist_directory=f"{persist_dir}/{topic}",
+            client = chroma_client,
+            collection_name = topic,
             embedding_function=embedding_function  # Use the same embedding function
         )
     print(f"✅ Loaded vector store for {topic} from ChromaDB.")
