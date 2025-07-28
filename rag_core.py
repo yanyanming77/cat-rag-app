@@ -1,8 +1,8 @@
-""" __import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules["pysqlite3"] """
+# __import__('pysqlite3')
+# import sys
+# sys.modules['sqlite3'] = sys.modules["pysqlite3"]
 
-import pysqlite3
+# import pysqlite3
 from sqlalchemy import create_engine, text, inspect
 import sqlite3
 
