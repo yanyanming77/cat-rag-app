@@ -26,11 +26,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 import uuid
 from openai import OpenAI
+import openai
 
 ######################## DEFINE OPENAI API KEY #######################
-openAI_api_key = "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"
+openai.api_key = st.secrets['openai_api_key']
 client = OpenAI(
-  api_key=openAI_api_key
+  api_key=openai.api_key
 )
 
 ######################## DEFINE EBMEDDING FUNCTION #######################
