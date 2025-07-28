@@ -43,12 +43,12 @@ embedding_function = load_embedding_function(openai.api_key)
 
 ######################## LOAD CHROMA DB #######################
 persist_dir = Path('./chroma_db')
-chroma_client = PersistentClient(path = f"{persist_dir}/{topic}")
 
 @st.cache_resource
 def load_chroma():
     vector_stores = {}
     for topic in ["Cats_Grooming_Tips", "Cat_Nutrition_Tips", "Cats_and_Babies", "Common_Cat_Behavior", "Common_Cat_Diseases"]:  
+        chroma_client = PersistentClient(path = f"{persist_dir}/{topic}")
         vector_stores[topic] = Chroma(
             client = chroma_client,
             collection_name = topic,
