@@ -40,7 +40,7 @@ client = OpenAI(
 @st.cache_resource
 def load_embedding_function(api_key):
     return OpenAIEmbeddings(model='text-embedding-ada-002', openai_api_key=api_key)
-embedding_function = load_embedding_function(openAI_api_key)
+embedding_function = load_embedding_function(openai.api_key)
 
 ######################## LOAD CHROMA DB #######################
 persist_dir = Path('./chroma_db')
