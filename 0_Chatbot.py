@@ -148,7 +148,7 @@ if prompt := st.chat_input("Ask me anything about cats..."):
 # add feature to allow user's upload of document file
 left_col, right_col = st.columns(2)
 with left_col:
-    uploaded_doc = st.file_uploader("📄 Upload Document", type=["pdf", "txt", "docx"], key="doc_upload")
+    uploaded_doc = st.file_uploader("📄 Upload Document\nto get answer based on your uploaded document", type=["pdf", "txt", "docx"], key="doc_upload")
     if uploaded_doc:
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_doc.name)[1]) as tmp:
             tmp.write(uploaded_doc.read())
@@ -161,6 +161,6 @@ with left_col:
 
 # add feature to allow user's upload of plant or nutrition fact image file
 with right_col:
-    uploaded_image = st.file_uploader("📷 Upload Image", type=["png", "jpg", "jpeg"], key="img_upload")
+    uploaded_image = st.file_uploader("📷 Upload Image\nto analyze the ingredients of the cat food", type=["png", "jpg", "jpeg"], key="img_upload")
     if uploaded_image:
         st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
