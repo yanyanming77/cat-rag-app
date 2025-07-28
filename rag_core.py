@@ -18,7 +18,7 @@ from chromadb import PersistentClient
 from langchain_community.vectorstores import Chroma, FAISS
 from langchain.chains import create_sql_query_chain, LLMChain
 from langchain.prompts import PromptTemplate
-from langchain_community.embeddings import OpenAIEmbeddingsfrom langchain.chat_models 
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.chat_models import ChatOpenAI
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
