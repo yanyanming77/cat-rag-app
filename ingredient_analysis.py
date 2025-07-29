@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image
 import pytesseract
 import re
+import openai
 from openai import OpenAI
 import os
 import json
