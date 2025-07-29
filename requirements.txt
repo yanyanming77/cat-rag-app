@@ -149,3 +149,4 @@ pysqlite3-binary>=0.5.0
 docx2txt
 faiss-cpu
 dotenv
+pytesseract
