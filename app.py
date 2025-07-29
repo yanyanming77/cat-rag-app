@@ -8,15 +8,18 @@ from langchain_community.vectorstores import FAISS
 # Set page config
 st.set_page_config(page_title="Cat Expert", layout="wide")
 
-# Sidebar for navigation
-st.sidebar.title("🐾 Navigation")
-page = st.sidebar.radio("Go to", ["Chatbot", "Quiz"])
+st.title("🐾 An App all about Cats 😺")
+tabs = st.tabs(["Chatbot", "Quiz", "Analyze Cat Food"])
 
-# Render corresponding page
-if page == "Chatbot":
+
+with tabs[0]:
     from cat_chatbot import run_chatbot
     run_chatbot()
 
-elif page == "Quiz":
+with tabs[1]:
     from cat_quiz import run_quiz
     run_quiz()
+
+with tabs[2]:
+    from ingredient_analysis import run_analyze_ingredients
+    run_analyze_ingredients()

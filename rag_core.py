@@ -1,11 +1,12 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules["pysqlite3"]
+# __import__('pysqlite3')
+# import sys
+# sys.modules['sqlite3'] = sys.modules["pysqlite3"]
 
 # import pysqlite3
 from sqlalchemy import create_engine, text, inspect
 import sqlite3
 
+from dotenv import load_dotenv
 import os
 import re
 from pathlib import Path
@@ -29,7 +30,12 @@ from openai import OpenAI
 import openai
 
 ######################## DEFINE OPENAI API KEY #######################
-openai.api_key = st.secrets['openai_api_key']
+try:
+    openai.api_key = st.secrets['openai_api_key']
+except:
+    load_dotenv()
+    openai.api_key = os.getenv('openai.api_key')
+
 client = OpenAI(
   api_key=openai.api_key
 )
@@ -59,7 +65,7 @@ def load_chroma():
 
 vector_stores = load_chroma()
 
-######################## DEFINE LLM to use#######################
+######################### DEFINE LLM to use#######################
 # define gpt-4o-mini as the llm used for topic classification
 @st.cache_resource
 def load_llm(api_key):
@@ -296,6 +302,7 @@ The respond should be short and concise.
 If you do not find enough information in the retrieved knowledge, say:  
 *"Sorry, I don't find enough information from the database. Please try another question."*
 
+If user asked a general question abou the uploaded document, just provide a short answer based on {user_doc_context}
 ---
 
 ### **Retrieved Knowledge**
@@ -312,10 +319,10 @@ If you do not find enough information in the retrieved knowledge, say:
 ### **User Query**
 {query}
 
-### **Conversation History**
+### **Retrieved knowledge from user uploads**
 {user_doc_context}
 
-### **Retrieved knowledge from user uploads**
+### **Conversation history**
 {history_context}
 
 ### **Answer**

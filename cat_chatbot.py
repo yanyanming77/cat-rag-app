@@ -40,60 +40,54 @@ def run_chatbot():
     st.markdown("""
         <div style='text-align: center;'>
             <h1>😺 Ask the Cat Expert</h1>
-            <div style='font-size: 18px; color: #555;'>
+            <div style='font-size: 20px; color: #555;'>
                 Welcome to the <b>Cat Expert Chatbot Designed by Ming</b>! 🐾<br>
             </div>
-            <div style="font-size: 10px; color: #555; font-style: italic;">
+            <div style="font-size: 15px; color: #555; font-style: italic;">
                 Ask questions about cat health, behavior, grooming, nutrition, plants toxic to cats, or how to raise cats and newborns together — powered by ChatGPT-4o-mini!
             </div>
         </div>
         """, unsafe_allow_html=True)    
 
-    # Add info box on main screen if sidebar might be overlooked:
-    st.markdown(
-        """
-        <div style="text-align: center; font-size: 14px; color: #3B3B3B; background-color: #E1F5FE; 
-                    padding: 10px; border-left: 5px solid #2196F3; border-radius: 3px; margin-bottom: 30px;">
-            <strong> 🧹Need to start over?</strong> Use the sidebar to reset the conversation.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # two buttons
+    # reset button right under the title
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("🧹 Reset Conversation"):
+                st.session_state.messages = []
+                st.session_state.reset_done = True
+                st.rerun()
+        with b2:
+            # Download button (simulated with conditional logic)
+            if st.button("📥 Download Conversation"):
+                if st.session_state.get("messages"):
+                    # create the word document
+                    doc = Document()
+                    doc.add_heading('Conversation History', level = 1)
+                    for m in st.session_state.messages:
+                        role = m['role'].capitalize()
+                        content = strip_html(m['content'])
+                        doc.add_paragraph(f"{role}: {content}")
+                    
+                    # Save to a BytesIO buffer
+                    buffer = io.BytesIO()
+                    doc.save(buffer)
+                    buffer.seek(0)
 
-    # Reset button right under the title
-    with st.sidebar:
-        st.header("Options")
-        if st.button("🧹 Reset Conversation"):
-            st.session_state.messages = []
-            st.session_state.reset_done = True
-            st.rerun()
-        # Download button (simulated with conditional logic)
-        if st.button("📥 Download Conversation"):
-            if st.session_state.get("messages"):
-                # create the word document
-                doc = Document()
-                doc.add_heading('Conversation History', level = 1)
-                for m in st.session_state.messages:
-                    role = m['role'].capitalize()
-                    content = strip_html(m['content'])
-                    doc.add_paragraph(f"{role}: {content}")
+                    # Create download button
+                    st.download_button(
+                        label="Click to confirm download",
+                        data=buffer,
+                        file_name="cat_chat.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="download"
+                    )
                 
-                # Save to a BytesIO buffer
-                buffer = io.BytesIO()
-                doc.save(buffer)
-                buffer.seek(0)
-
-                # Create download button
-                st.download_button(
-                    label="Click to confirm download",
-                    data=buffer,
-                    file_name="cat_chat.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="download"
-                )
-                
-            else:
-                st.warning("⚠️ The conversation is empty. Nothing to download.")
+                else:
+                    st.warning("⚠️ The conversation is empty. Nothing to download.")
 
 
     # Outside sidebar, after page reload show success message after reset
@@ -148,21 +142,14 @@ def run_chatbot():
         # st.rerun() 
 
     # add feature to allow user's upload of document file
-    left_col, right_col = st.columns(2)
-    with left_col:
-        uploaded_doc = st.file_uploader("📄 Upload Document\nto get answer based on your uploaded document", type=["pdf", "txt", "docx"], key="doc_upload")
-        if uploaded_doc:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_doc.name)[1]) as tmp:
-                tmp.write(uploaded_doc.read())
-                doc_chunks = load_and_chunk_document(tmp.name)
-                st.session_state.faiss_store = create_or_update_faiss(st.session_state.faiss_store, doc_chunks)
-                # track state of the uploaded document
-                if "uploaded_docs" not in st.session_state:
-                    st.session_state.uploaded_docs = []
-                st.session_state.uploaded_docs.append(uploaded_doc.name)
+    uploaded_doc = st.file_uploader("📄 Upload Document\nto get answer based on your uploaded document", type=["pdf", "txt", "docx"], key="doc_upload")
+    if uploaded_doc:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_doc.name)[1]) as tmp:
+            tmp.write(uploaded_doc.read())
+            doc_chunks = load_and_chunk_document(tmp.name)
+            st.session_state.faiss_store = create_or_update_faiss(st.session_state.faiss_store, doc_chunks)
+            # track state of the uploaded document
+            if "uploaded_docs" not in st.session_state:
+                st.session_state.uploaded_docs = []
+            st.session_state.uploaded_docs.append(uploaded_doc.name)
 
-    # add feature to allow user's upload of plant or nutrition fact image file
-    with right_col:
-        uploaded_image = st.file_uploader("📷 Upload Image\nto analyze the ingredients of the cat food", type=["png", "jpg", "jpeg"], key="img_upload")
-        if uploaded_image:
-            st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
